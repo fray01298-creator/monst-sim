@@ -1,0 +1,2588 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>シミュレーター v0.9</title>
+<style>
+  :root {
+    --bg: #12151c;
+    --panel: #1c212b;
+    --border: #2d3545;
+    --text: #eef2f7;
+    --muted: #9aa5b4;
+    --accent: #ff9800;
+    --accent2: #00bcd4;
+    --pierce: #69f0ae;
+    --danger: #ef5350;
+  }
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Meiryo", sans-serif;
+    overflow: hidden;
+  }
+  html, body { height: 100dvh; overscroll-behavior: none; }
+  .app {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: row;
+  }
+  .canvas-wrap {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  canvas {
+    display: block;
+    touch-action: none;
+  }
+  /* HUD：壁枠の外（上側の余白）に自動配置 */
+  .hud-badge {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(18, 21, 28, 0.82);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 9px;
+    font-size: 12px;
+    line-height: 1.4;
+    pointer-events: none;
+    max-width: calc(100% - 16px);
+    white-space: nowrap;
+    z-index: 5;
+  }
+  .hud-badge strong { color: var(--accent); font-size: 15px; }
+  .pill {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 4px;
+  }
+  .pill-reflect { background: rgba(255, 152, 0, 0.22); color: #ffb74d; border: 1px solid rgba(255, 152, 0, 0.5); }
+  .pill-pierce { background: rgba(105, 240, 174, 0.2); color: #69f0ae; border: 1px solid rgba(105, 240, 174, 0.5); }
+  .pill-practice { background: rgba(233, 30, 99, 0.25); color: #f48fb1; border: 1px solid rgba(233, 30, 99, 0.55); }
+  .hud-gimmick {
+    font-size: 11px;
+    color: #cfd8dc;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+  .hud-gimmick:empty { display: none; }
+  .mode-toast {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.75);
+    color: #fff;
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 14px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .25s;
+    z-index: 6;
+    white-space: nowrap;
+    max-width: calc(100% - 16px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mode-toast.show { opacity: 1; }
+
+  /* クイックバー（画面下） */
+  .quickbar {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    background: rgba(18, 21, 28, 0.85);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+    z-index: 7;
+    max-width: calc(100% - 8px);
+  }
+  .qb {
+    background: #28303f;
+    color: var(--text);
+    border: 1px solid #3a4559;
+    border-radius: 8px;
+    min-width: 34px;
+    height: 38px;
+    padding: 0 6px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .qb.active { background: var(--accent); color: #111; border-color: var(--accent); }
+  .qb.active-play { background: #29b6f6; color: #07131a; border-color: #29b6f6; }
+  .qb-sep { width: 1px; height: 26px; background: var(--border); margin: 0 1px; }
+  .qb-angle { font-size: 13px; min-width: 30px; }
+  .drop-hint {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.45);
+    pointer-events: none;
+  }
+
+  /* 設定パネル */
+  .controls {
+    flex: 0 0 auto;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    padding: 10px 12px calc(16px + env(safe-area-inset-bottom));
+    padding-top: calc(10px + env(safe-area-inset-top));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 420px;
+    z-index: 20;
+  }
+  .app.panel-closed .controls { display: none; }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 700;
+    font-size: 14px;
+    position: sticky;
+    top: calc(-10px - env(safe-area-inset-top));
+    background: var(--panel);
+    padding: 4px 0;
+    z-index: 2;
+  }
+  .panel-backdrop { display: none; }
+  @media (max-width: 899px) {
+    .controls {
+      position: fixed;
+      top: 0; right: 0; bottom: 0;
+      width: min(88vw, 400px);
+      transform: translateX(0);
+      transition: transform .22s ease;
+      box-shadow: -8px 0 24px rgba(0,0,0,.5);
+    }
+    .app.panel-closed .controls { display: flex; transform: translateX(105%); }
+    .panel-backdrop {
+      display: block;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.35);
+      z-index: 19;
+    }
+    .app.panel-closed .panel-backdrop { display: none; }
+    .controls.peek { opacity: .15; }
+    .drop-hint { display: none; }
+  }
+  .row {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .btn {
+    background: #28303f;
+    color: var(--text);
+    border: 1px solid #3a4559;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    flex: 1 1 auto;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn.active { background: var(--accent); color: #111; border-color: var(--accent); }
+  .btn.active-pierce { background: var(--pierce); color: #0b1912; border-color: var(--pierce); }
+  .btn.active-practice { background: #ec407a; color: #fff; border-color: #ec407a; }
+  .btn.active-play { background: #29b6f6; color: #07131a; border-color: #29b6f6; }
+  .btn.danger { background: rgba(239, 83, 80, 0.18); border-color: rgba(239, 83, 80, 0.5); color: #ff8a80; }
+  .btn-sm { padding: 5px 7px; font-size: 11px; flex: 0 0 auto; }
+
+  .group {
+    background: rgba(0,0,0,0.22);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11.5px;
+    color: var(--muted);
+    gap: 6px;
+  }
+  .group-header span.val {
+    color: var(--text);
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+  }
+  select, input[type="text"] {
+    background: #252c3a;
+    color: var(--text);
+    border: 1px solid #3c475c;
+    border-radius: 5px;
+    padding: 4px 6px;
+    font-size: 11.5px;
+  }
+  input[type="text"]::placeholder {
+    color: #788496;
+  }
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+    height: 20px;
+    margin: 0;
+  }
+  .fine-btns {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+  }
+  .fine-btns button {
+    background: #252c3a;
+    color: var(--text);
+    border: 1px solid #384256;
+    border-radius: 5px;
+    padding: 5px 0;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .fine-btns button:active { background: var(--accent); color: #111; }
+  .wall-gimmick-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .wg-row {
+    display: grid;
+    grid-template-columns: 56px 76px 1fr 1fr;
+    gap: 4px;
+    align-items: center;
+    background: #222836;
+    padding: 4px 6px;
+    border-radius: 5px;
+    font-size: 11px;
+  }
+  .wg-row label {
+    display: flex;
+    flex-direction: column;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .wg-row input[type="range"] {
+    height: 16px;
+  }
+  .embed-box {
+    width: 100%;
+    min-height: 68px;
+    background: #10141c;
+    color: #a5d6a7;
+    border: 1px solid #334055;
+    border-radius: 6px;
+    padding: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10.5px;
+    resize: vertical;
+    display: none;
+  }
+  .embed-box.open {
+    display: block;
+  }
+  input[type="file"] { display: none; }
+</style>
+</head>
+<body>
+<div class="app panel-closed" id="app">
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="simCanvas"></canvas>
+    <div class="hud-badge" id="hudBadge">
+      角度: <strong id="angleText">-62.00°</strong>
+      <span id="typeBadge" class="pill pill-reflect">反射</span>
+      <span id="practiceBadge" class="pill pill-practice" style="display:none;">練習(予測OFF)</span>
+      <div class="hud-gimmick" id="hudGimmick"></div>
+    </div>
+    <div class="mode-toast" id="modeToast"><span id="modeDesc">画面ドラッグで引っ張り方向を調整</span></div>
+    <div class="quickbar" id="quickbar">
+      <button class="qb active" data-mode="pull" title="引っ張り">🎯</button>
+      <button class="qb" data-mode="ball" title="キャラ移動">⚪</button>
+      <button class="qb" data-mode="obs" title="障害物">🧱</button>
+      <button class="qb" data-mode="wall" title="壁枠">⬜</button>
+      <button class="qb" data-mode="img" title="画像調整">🖼</button>
+      <span class="qb-sep"></span>
+      <button class="qb qb-angle" id="qbMinus" title="角度 −（長押しで連続）">−</button>
+      <button class="qb qb-angle" id="qbPlus" title="角度 ＋（長押しで連続）">＋</button>
+      <button class="qb" id="qbPlay" title="再生/停止">▶</button>
+      <span class="qb-sep"></span>
+      <button class="qb" id="qbSettings" title="設定">⚙</button>
+    </div>
+    <div class="drop-hint">PC: Ctrl+V / ドロップで画像読込</div>
+  </div>
+
+  <div class="panel-backdrop" id="panelBackdrop"></div>
+  <div class="controls" id="settingsPanel">
+    <div class="panel-head">
+      <span>⚙ 設定</span>
+      <span style="display:flex; gap:6px;">
+        <button class="btn btn-sm" id="btnPeek" title="押している間だけパネルを透明にして盤面を確認">👁 透かす</button>
+        <button class="btn btn-sm" id="btnClosePanel">✕ 閉じる</button>
+      </span>
+    </div>
+    <!-- 1段目：画像＆撃種＆練習モード -->
+    <div class="row">
+      <label class="btn btn-sm" for="fileInput">📷 画像</label>
+      <input type="file" id="fileInput" accept="image/*">
+      <button class="btn btn-sm" id="btnDummy">模擬</button>
+      <button class="btn active" id="btnReflect">反射</button>
+      <button class="btn" id="btnPierce">貫通</button>
+      <button class="btn" id="btnPractice" title="予測線を隠してアニメーションで答え合わせ">🏋️ 練習</button>
+    </div>
+
+    <!-- 2段目：アニメーション再生 -->
+    <div class="group">
+      <div class="group-header">
+        <span>軌道アニメーション</span>
+        <span class="val" id="animStatus">停止中</span>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnPlay">▶ 再生</button>
+        <button class="btn btn-sm" id="btnResetAnim">↺ リセット</button>
+        <select id="speedSelect" title="再生速度">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1.0x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2.5">2.5x</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 3段目：自作プリセット（保存・読込・削除・HTML埋込用コード出力） -->
+    <div class="group">
+      <div class="group-header">
+        <span>マイプリセット（ブラウザ保存＆HTML埋込可）</span>
+        <span class="val" id="presetStatus">0件</span>
+      </div>
+      <div class="row">
+        <select id="presetSelect" style="flex:1 1 55%;"></select>
+        <button class="btn btn-sm active" id="loadPresetBtn">読込</button>
+        <button class="btn btn-sm danger" id="delPresetBtn">削除</button>
+      </div>
+      <div class="row">
+        <input type="text" id="presetNameInput" placeholder="プリセット名（例: 〇〇 B1）" style="flex:1 1 50%;">
+        <button class="btn btn-sm" id="savePresetBtn">＋ 保存</button>
+        <button class="btn btn-sm" id="exportEmbedBtn" title="EMBEDDED_PRESETSに貼るコードを出力">📋 埋込コード</button>
+      </div>
+      <textarea id="embedCodeBox" class="embed-box" readonly placeholder="「📋 埋込コード」を押すと、HTML内の EMBEDDED_PRESETS に貼り付けるコードが出ます"></textarea>
+    </div>
+
+    <!-- 4段目：操作モード切替 -->
+    <div class="row">
+      <button class="btn active" id="modePull">🎯 引っ張り</button>
+      <button class="btn" id="modeBall">⚪ キャラ</button>
+      <button class="btn" id="modeObs">🧱 障害物</button>
+      <button class="btn" id="modeWall">⬜ 壁枠</button>
+      <button class="btn" id="modeImg">🖼 画像</button>
+    </div>
+
+    <!-- 画像の位置・サイズ調整 -->
+    <div class="group">
+      <div class="group-header">
+        <span>画像調整（🖼画像モード：ドラッグ移動 / ホイール・ピンチで拡大縮小）</span>
+        <span class="val" id="imgZoomVal">画像なし</span>
+      </div>
+      <div class="row">
+        <button class="btn btn-sm" id="imgFitW">幅に合わせる</button>
+        <button class="btn btn-sm" id="imgFitH">高さに合わせる</button>
+        <button class="btn btn-sm" id="imgZoomOut">－</button>
+        <button class="btn btn-sm" id="imgZoomIn">＋</button>
+      </div>
+    </div>
+
+    <!-- 5段目：障害物追加・削除 -->
+    <div class="group">
+      <div class="group-header">
+        <span>障害物（円＝敵 / 四角＝ブロック）</span>
+        <span class="val" id="obsCount">0個</span>
+      </div>
+      <div class="row">
+        <button class="btn btn-sm" id="addCircle">＋ 円(敵)</button>
+        <button class="btn btn-sm" id="addRect">＋ 四角</button>
+        <button class="btn btn-sm danger" id="delObs">削除</button>
+        <button class="btn btn-sm" id="clearObs">全消去</button>
+      </div>
+    </div>
+
+    <!-- 6段目：壁ギミック（PUW部分設置 / HCW） -->
+    <div class="group">
+      <div class="group-header">
+        <span>壁ギミック（PUWは開始位置＆長さで部分設置可）</span>
+        <button class="btn btn-sm" id="clearWallGimmick" style="padding:2px 6px; font-size:10px;">全解除</button>
+      </div>
+      <div class="wall-gimmick-list" id="wallGimmickList"></div>
+    </div>
+
+    <!-- 7段目：角度調整 -->
+    <div class="group">
+      <div class="group-header">
+        <span>発射角度（0°=右, -90°=上）</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <select id="stepSelect">
+            <option value="0.25" selected>0.25°(1440分割)</option>
+            <option value="0.1">0.1°</option>
+            <option value="1">1°</option>
+          </select>
+          <span class="val" id="angleVal">-62.00°</span>
+        </div>
+      </div>
+      <input type="range" id="angleSlider" min="-180" max="180" step="0.25" value="-62">
+      <div class="fine-btns" id="fineBtns"></div>
+    </div>
+
+    <!-- 8段目：反射数（1〜16）＆ 弾の半径 ＆ 壁枠比率固定 -->
+    <div class="group">
+      <div class="group-header">
+        <span>反射数（1〜16回）</span>
+        <span class="val" id="bounceVal">6 回</span>
+      </div>
+      <input type="range" id="bounceSlider" min="1" max="16" step="1" value="6">
+
+      <div class="group-header" style="margin-top:2px;">
+        <span>弾（キャラ）の半径（壁枠の幅が基準）</span>
+        <span class="val" id="radiusVal">壁幅の 3.8%</span>
+      </div>
+      <input type="range" id="radiusSlider" min="0" max="12" step="0.1" value="3.8">
+
+      <div class="group-header" style="margin-top:2px;">
+        <label style="color:var(--text); cursor:pointer; font-size:11.5px; font-weight:600;">
+          <input type="checkbox" id="chkSquareWall" checked> 壁枠を 縦9:横8 固定
+        </label>
+        <label style="color:var(--text); cursor:pointer; font-size:11px;">
+          <input type="checkbox" id="chkShowEffective" checked> 実反射ライン
+        </label>
+        <label style="color:var(--text); cursor:pointer; font-size:11px;" title="反射した瞬間のキャラ位置と、跳ね返りの基準線（法線）を表示">
+          <input type="checkbox" id="chkShowContacts" checked> 接触表示
+        </label>
+      </div>
+      <div class="row">
+        <button class="btn btn-sm" id="presetIphone">iPhone 15 Pro 9:8枠</button>
+        <button class="btn btn-sm" id="presetSquareCenter">中央 9:8枠</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // =========================================================================
+  // 【HTMLに埋め込むプリセット配列】
+  // 「📋 埋込コード」ボタンで出力したオブジェクトをここに追加すると、
+  // どの端末・ブラウザから開いても最初から読み込めるようになります。
+  // =========================================================================
+  const EMBEDDED_PRESETS = [
+    {
+  "name": "マイステージ",
+  "shotType": "pierce",
+  "ball": {
+    "u": 0.4001,
+    "v": 0.8022
+  },
+  "wallGimmicks": {
+    "top": {
+      "type": "hcw",
+      "start": 0,
+      "length": 1
+    },
+    "bottom": {
+      "type": "hcw",
+      "start": 0,
+      "length": 1
+    },
+    "left": {
+      "type": "hcw",
+      "start": 0,
+      "length": 1
+    },
+    "right": {
+      "type": "hcw",
+      "start": 0,
+      "length": 1
+    }
+  },
+  "obstacles": [
+    {
+      "type": "circle",
+      "u": 0.521,
+      "v": 0.5072,
+      "ur": 0.2172,
+      "label": "敵"
+    },
+    {
+      "type": "circle",
+      "u": 0.8797,
+      "v": 0.8712,
+      "ur": 0.0969,
+      "label": "敵"
+    },
+    {
+      "type": "circle",
+      "u": 0.1623,
+      "v": 0.1422,
+      "ur": 0.0923,
+      "label": "敵"
+    }
+  ]
+}
+    // 例:
+    // {
+    //   name: "サンプル配置",
+    //   shotType: "reflect",
+    //   ball: { u: 0.5, v: 0.8 },
+    //   wallGimmicks: {
+    //     top: { type: "none", start: 0.15, length: 0.7 },
+    //     bottom: { type: "none", start: 0.15, length: 0.7 },
+    //     left: { type: "none", start: 0.15, length: 0.7 },
+    //     right: { type: "none", start: 0.15, length: 0.7 }
+    //   },
+    //   obstacles: [
+    //     { type: "circle", u: 0.5, v: 0.35, ur: 0.08, label: "敵1" }
+    //   ]
+    // }
+  ];
+
+  const canvas = document.getElementById('simCanvas');
+  const ctx = canvas.getContext('2d');
+  const wrap = document.getElementById('canvasWrap');
+
+  const STORAGE_KEY = 'monst_sim_v9_state';
+  const OLD_STORAGE_KEYS = ['monst_sim_v7_state', 'monst_sim_v6_state'];
+  const PRESETS_KEY = 'monst_sim_v6_user_presets';
+
+  // 壁枠の縦横比（縦 : 横 = 9 : 8 → 高さ = 幅 * 1.125）
+  const WALL_H_PER_W = 9 / 8;
+
+  function makeDefaultWallGimmicks() {
+    return {
+      top:    { type: 'none', start: 0.15, length: 0.70 },
+      bottom: { type: 'none', start: 0.15, length: 0.70 },
+      left:   { type: 'none', start: 0.15, length: 0.70 },
+      right:  { type: 'none', start: 0.15, length: 0.70 }
+    };
+  }
+
+  const defaultState = {
+    shotType: 'reflect',
+    practiceMode: false,
+    wall: { left: 0.042, right: 0.958, top: 0.224, bottom: 0.699 }, // 縦9:横8
+    wallGimmicks: makeDefaultWallGimmicks(),
+    lockWallRatio: true,
+    ball: { x: 0.50, y: 0.58 },
+    angleDeg: -62.0,
+    angleStep: 0.25,
+    bounces: 6,
+    radiusWallRatio: 0.038, // キャラ半径＝壁枠の幅 × この値
+    showContacts: true,
+    showEffective: true,
+    obstacles: []
+  };
+
+  function normalizeWallGimmicks(raw) {
+    const base = makeDefaultWallGimmicks();
+    if (!raw) return base;
+    ['top', 'bottom', 'left', 'right'].forEach(side => {
+      const item = raw[side];
+      if (!item) return;
+      if (typeof item === 'string') {
+        base[side].type = item;
+      } else {
+        base[side].type = item.type || 'none';
+        base[side].start = Math.max(0, Math.min(0.95, parseFloat(item.start) || 0));
+        base[side].length = Math.max(0.05, Math.min(1 - base[side].start, parseFloat(item.length) || 1.0));
+      }
+    });
+    return base;
+  }
+
+  let state = loadState();
+  let userPresets = loadUserPresets();
+  let mode = 'pull';
+  let selectedObsId = state.obstacles[0] ? state.obstacles[0].id : null;
+  let bgImage = null;
+  let safeProbe = null;
+  // キャンバスの縦横比は固定（iPhone 15 Pro 画面比 1179×2556）
+  const CANVAS_W = 1179;
+  const CANVAS_H = 2556;
+  let imgView = { x: 0, y: 0, s: 1 };
+  const activePointers = new Map();
+  let pinchStart = null;
+  let imgDragStart = null;
+
+  let isPlaying = false;
+  let animSpeed = 1.0;
+  let animDistance = 0;
+  let lastFrameTime = null;
+  let rafId = null;
+
+  let isDragging = false;
+  let dragStart = { x: 0, y: 0 };
+  let activeWallHandle = null;
+  let startWall = null;
+  let startScene = null;
+  let activeObsHandle = null;
+  let startObs = null;
+
+  function loadState() {
+    try {
+      let saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (!saved) {
+        for (const key of OLD_STORAGE_KEYS) {
+          const old = JSON.parse(localStorage.getItem(key));
+          if (old && old.wall && old.ball) {
+            saved = old;
+            if (typeof old.squareWall === 'boolean' && typeof old.lockWallRatio !== 'boolean') {
+              saved.lockWallRatio = old.squareWall;
+            }
+            if (typeof old.radiusRatio === 'number' && typeof old.radiusWallRatio !== 'number') {
+              const ww = Math.max(0.05, (old.wall.right || 0.958) - (old.wall.left || 0.042));
+              saved.radiusWallRatio = old.radiusRatio / ww;
+            }
+            break;
+          }
+        }
+      }
+      if (saved && saved.wall && saved.ball) {
+        return {
+          ...defaultState,
+          ...saved,
+          bounces: Math.max(1, Math.min(16, parseInt(saved.bounces, 10) || 6)),
+          wall: { ...defaultState.wall, ...saved.wall },
+          wallGimmicks: normalizeWallGimmicks(saved.wallGimmicks),
+          ball: { ...defaultState.ball, ...saved.ball },
+          obstacles: Array.isArray(saved.obstacles) ? saved.obstacles : []
+        };
+      }
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(defaultState));
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {}
+  }
+
+  function loadUserPresets() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(PRESETS_KEY));
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveUserPresets() {
+    try {
+      localStorage.setItem(PRESETS_KEY, JSON.stringify(userPresets));
+    } catch (e) {}
+  }
+
+  // 現在の状態を「壁枠内の相対座標(u, v)」へ変換（埋込・プリセット用）
+  function buildPresetData(name) {
+    const wl = state.wall.left;
+    const wr = state.wall.right;
+    const wt = state.wall.top;
+    const wb = state.wall.bottom;
+    const ww = Math.max(0.01, wr - wl);
+    const wh = Math.max(0.01, wb - wt);
+
+    return {
+      name: name || ('プリセット ' + new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })),
+      shotType: state.shotType,
+      ball: {
+        u: Number(((state.ball.x - wl) / ww).toFixed(4)),
+        v: Number(((state.ball.y - wt) / wh).toFixed(4))
+      },
+      wallGimmicks: normalizeWallGimmicks(state.wallGimmicks),
+      obstacles: state.obstacles.map((o, i) => {
+        if (o.type === 'circle') {
+          return {
+            type: 'circle',
+            u: Number(((o.x - wl) / ww).toFixed(4)),
+            v: Number(((o.y - wt) / wh).toFixed(4)),
+            ur: Number((o.r / ww).toFixed(4)),
+            label: o.label || ('敵' + (i + 1))
+          };
+        } else {
+          return {
+            type: 'rect',
+            u: Number(((o.x - wl) / ww).toFixed(4)),
+            v: Number(((o.y - wt) / wh).toFixed(4)),
+            uw: Number((o.w / ww).toFixed(4)),
+            uh: Number((o.h / wh).toFixed(4)),
+            label: o.label || 'ブロック'
+          };
+        }
+      })
+    };
+  }
+
+  function applyPresetData(pData) {
+    if (!pData) return;
+    const wl = state.wall.left;
+    const wr = state.wall.right;
+    const wt = state.wall.top;
+    const wb = state.wall.bottom;
+    const ww = wr - wl;
+    const wh = wb - wt;
+
+    state.shotType = pData.shotType === 'pierce' ? 'pierce' : 'reflect';
+    state.wallGimmicks = normalizeWallGimmicks(pData.wallGimmicks);
+    if (pData.ball) {
+      state.ball = {
+        x: wl + (pData.ball.u ?? 0.5) * ww,
+        y: wt + (pData.ball.v ?? 0.7) * wh
+      };
+    }
+    state.obstacles = Array.isArray(pData.obstacles)
+      ? pData.obstacles.map((o, idx) => {
+          const id = 'pr_' + Date.now() + '_' + idx;
+          if (o.type === 'circle') {
+            return {
+              id,
+              type: 'circle',
+              x: wl + (o.u ?? 0.5) * ww,
+              y: wt + (o.v ?? 0.4) * wh,
+              r: (o.ur ?? 0.06) * ww,
+              label: o.label || ('敵' + (idx + 1))
+            };
+          } else {
+            return {
+              id,
+              type: 'rect',
+              x: wl + (o.u ?? 0.5) * ww,
+              y: wt + (o.v ?? 0.5) * wh,
+              w: (o.uw ?? 0.22) * ww,
+              h: (o.uh ?? 0.04) * wh,
+              label: o.label || 'ブロック'
+            };
+          }
+        })
+      : [];
+    selectedObsId = state.obstacles[0] ? state.obstacles[0].id : null;
+    resetAnim();
+    buildWallGimmickUI();
+    syncUI();
+    saveState();
+    render();
+  }
+
+  // プリセットUI制御（EMBEDDED_PRESETS + ユーザー保存プリセット）
+  const presetSelect = document.getElementById('presetSelect');
+  const presetNameInput = document.getElementById('presetNameInput');
+  const presetStatus = document.getElementById('presetStatus');
+  const embedCodeBox = document.getElementById('embedCodeBox');
+
+  function getAllPresets() {
+    const emb = (Array.isArray(EMBEDDED_PRESETS) ? EMBEDDED_PRESETS : []).map((p, i) => ({
+      ...p,
+      _source: 'embedded',
+      _index: i
+    }));
+    const usr = userPresets.map((p, i) => ({
+      ...p,
+      _source: 'user',
+      _index: i
+    }));
+    return [...emb, ...usr];
+  }
+
+  function refreshPresetDropdown(selectValue = null) {
+    const all = getAllPresets();
+    presetSelect.innerHTML = '';
+    if (all.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '（保存済みプリセットなし）';
+      presetSelect.appendChild(opt);
+    } else {
+      all.forEach((p, idx) => {
+        const opt = document.createElement('option');
+        opt.value = String(idx);
+        const prefix = p._source === 'embedded' ? '[埋込] ' : '';
+        opt.textContent = prefix + (p.name || ('プリセット' + (idx + 1)));
+        presetSelect.appendChild(opt);
+      });
+      if (selectValue !== null) {
+        presetSelect.value = String(selectValue);
+      }
+    }
+    presetStatus.textContent = `埋込:${EMBEDDED_PRESETS.length} / 保存:${userPresets.length}`;
+  }
+
+  document.getElementById('savePresetBtn').addEventListener('click', () => {
+    const name = presetNameInput.value.trim();
+    const data = buildPresetData(name);
+    userPresets.push(data);
+    saveUserPresets();
+    presetNameInput.value = '';
+    const newIdx = EMBEDDED_PRESETS.length + userPresets.length - 1;
+    refreshPresetDropdown(newIdx);
+  });
+
+  document.getElementById('loadPresetBtn').addEventListener('click', () => {
+    const all = getAllPresets();
+    const idx = parseInt(presetSelect.value, 10);
+    if (!isNaN(idx) && all[idx]) {
+      applyPresetData(all[idx]);
+    }
+  });
+
+  document.getElementById('delPresetBtn').addEventListener('click', () => {
+    const all = getAllPresets();
+    const idx = parseInt(presetSelect.value, 10);
+    if (isNaN(idx) || !all[idx]) return;
+    const item = all[idx];
+    if (item._source === 'embedded') {
+      alert('HTMLに埋め込み済みのプリセットはコード上から編集してください。');
+      return;
+    }
+    userPresets.splice(item._index, 1);
+    saveUserPresets();
+    refreshPresetDropdown();
+  });
+
+  document.getElementById('exportEmbedBtn').addEventListener('click', () => {
+    const name = presetNameInput.value.trim() || 'マイステージ';
+    const data = buildPresetData(name);
+    const jsonSnippet = JSON.stringify(data, null, 2) + ',';
+    embedCodeBox.value = jsonSnippet;
+    embedCodeBox.classList.add('open');
+    embedCodeBox.select();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(jsonSnippet).catch(() => {});
+    }
+  });
+
+  function quantizeAngle(deg) {
+    const step = state.angleStep || 0.25;
+    let a = ((deg + 180) % 360 + 360) % 360 - 180;
+    const q = Math.round(a / step) * step;
+    let wrapped = ((q + 180) % 360 + 360) % 360 - 180;
+    return Number(wrapped.toFixed(2));
+  }
+
+  function formatAngle(deg) {
+    const step = state.angleStep || 0.25;
+    if (step >= 1) return deg.toFixed(0) + '°';
+    if (step >= 0.25) return deg.toFixed(2) + '°';
+    return deg.toFixed(1) + '°';
+  }
+
+  // 壁枠が変わったら、キャラ・障害物を壁枠に追従させる
+  function remapScene(fromWall, toWall, scene) {
+    const ow = Math.max(1e-6, fromWall.right - fromWall.left);
+    const oh = Math.max(1e-6, fromWall.bottom - fromWall.top);
+    const sx = (toWall.right - toWall.left) / ow;
+    const sy = (toWall.bottom - toWall.top) / oh;
+    const mx = x => toWall.left + (x - fromWall.left) * sx;
+    const my = y => toWall.top + (y - fromWall.top) * sy;
+    state.ball = { x: mx(scene.ball.x), y: my(scene.ball.y) };
+    state.obstacles = scene.obstacles.map(o => {
+      const n = { ...o, x: mx(o.x), y: my(o.y) };
+      if (o.type === 'circle') n.r = o.r * sx;
+      else { n.w = o.w * sx; n.h = o.h * sy; }
+      return n;
+    });
+  }
+  function snapshotScene() {
+    return { ball: { ...state.ball }, obstacles: state.obstacles.map(o => ({ ...o })) };
+  }
+  function setWall(newWall, fromWall = state.wall, scene = snapshotScene()) {
+    remapScene(fromWall, newWall, scene);
+    state.wall = { ...newWall };
+  }
+
+  // ---- [v0.9] 壁枠を 縦9:横8（高さ = 幅 * 9/8）に整える
+  function enforceWallAspect(wPx, hPx, anchor = 'center', targetWall = state.wall, fromWall = null, scene = null) {
+    if (!state.lockWallRatio) {
+      if (fromWall) setWall(targetWall, fromWall, scene);
+      else state.wall = { ...targetWall };
+      return;
+    }
+    let left = targetWall.left * wPx;
+    let right = targetWall.right * wPx;
+    let top = targetWall.top * hPx;
+    let bottom = targetWall.bottom * hPx;
+
+    let ww = Math.max(40, right - left);
+    let hh = Math.max(45, bottom - top);
+    const maxW = Math.min(wPx, hPx / WALL_H_PER_W);
+
+    // どのハンドルを動かしているかに応じて基準辺を決める
+    let newW, newH;
+    if (anchor === 'top' || anchor === 'bottom') {
+      newH = Math.min(hPx, Math.max(45, hh));
+      newW = newH / WALL_H_PER_W;
+      if (newW > maxW) { newW = maxW; newH = newW * WALL_H_PER_W; }
+    } else if (anchor === 'left' || anchor === 'right') {
+      newW = Math.min(maxW, Math.max(40, ww));
+      newH = newW * WALL_H_PER_W;
+    } else {
+      newW = Math.min(maxW, Math.max(ww, hh / WALL_H_PER_W));
+      newH = newW * WALL_H_PER_W;
+    }
+
+    if (anchor === 'top') {
+      const cx = (left + right) / 2;
+      left = cx - newW / 2; right = cx + newW / 2; bottom = top + newH;
+    } else if (anchor === 'bottom') {
+      const cx = (left + right) / 2;
+      left = cx - newW / 2; right = cx + newW / 2; top = bottom - newH;
+    } else if (anchor === 'left') {
+      const cy = (top + bottom) / 2;
+      top = cy - newH / 2; bottom = cy + newH / 2; right = left + newW;
+    } else if (anchor === 'right') {
+      const cy = (top + bottom) / 2;
+      top = cy - newH / 2; bottom = cy + newH / 2; left = right - newW;
+    } else {
+      const cx = (left + right) / 2;
+      const cy = (top + bottom) / 2;
+      left = cx - newW / 2; right = cx + newW / 2;
+      top = cy - newH / 2; bottom = cy + newH / 2;
+    }
+
+    if (left < 0) { right -= left; left = 0; }
+    if (right > wPx) { left -= (right - wPx); right = wPx; }
+    if (top < 0) { bottom -= top; top = 0; }
+    if (bottom > hPx) { top -= (bottom - hPx); bottom = hPx; }
+
+    const newWall = {
+      left: Math.max(0, Math.min(1, left / wPx)),
+      right: Math.max(0, Math.min(1, right / wPx)),
+      top: Math.max(0, Math.min(1, top / hPx)),
+      bottom: Math.max(0, Math.min(1, bottom / hPx))
+    };
+    if (fromWall) {
+      setWall(newWall, fromWall, scene);
+    } else {
+      const d = Math.abs(newWall.left - state.wall.left) + Math.abs(newWall.right - state.wall.right) +
+                Math.abs(newWall.top - state.wall.top) + Math.abs(newWall.bottom - state.wall.bottom);
+      if (d > 1e-4) setWall(newWall);
+    }
+  }
+
+  const wallGimmickList = document.getElementById('wallGimmickList');
+  const sideLabels = { top: '⬆ 上壁', bottom: '⬇ 下壁', left: '⬅ 左壁', right: '➡ 右壁' };
+
+  function buildWallGimmickUI() {
+    wallGimmickList.innerHTML = '';
+    ['top', 'bottom', 'left', 'right'].forEach(side => {
+      const cfg = state.wallGimmicks[side];
+      const row = document.createElement('div');
+      row.className = 'wg-row';
+
+      const title = document.createElement('span');
+      title.style.fontWeight = '600';
+      title.textContent = sideLabels[side];
+
+      const sel = document.createElement('select');
+      sel.innerHTML = `
+        <option value="none">なし</option>
+        <option value="puw">PUW</option>
+        <option value="hcw">HCW</option>
+      `;
+      sel.value = cfg.type;
+
+      const startLbl = document.createElement('label');
+      const startRange = document.createElement('input');
+      startRange.type = 'range';
+      startRange.min = '0';
+      startRange.max = '0.9';
+      startRange.step = '0.05';
+      startRange.value = String(cfg.start);
+      const startText = document.createElement('span');
+      startText.textContent = `始:${Math.round(cfg.start * 100)}%`;
+      startLbl.append(startText, startRange);
+
+      const lenLbl = document.createElement('label');
+      const lenRange = document.createElement('input');
+      lenRange.type = 'range';
+      lenRange.min = '0.1';
+      lenRange.max = '1.0';
+      lenRange.step = '0.05';
+      lenRange.value = String(cfg.length);
+      const lenText = document.createElement('span');
+      lenText.textContent = `幅:${Math.round(cfg.length * 100)}%`;
+      lenLbl.append(lenText, lenRange);
+
+      const updateCfg = () => {
+        cfg.type = sel.value;
+        cfg.start = parseFloat(startRange.value);
+        cfg.length = Math.min(1 - cfg.start, Math.max(0.05, parseFloat(lenRange.value)));
+        lenRange.value = String(cfg.length);
+        startText.textContent = `始:${Math.round(cfg.start * 100)}%`;
+        lenText.textContent = `幅:${Math.round(cfg.length * 100)}%`;
+        saveState();
+        render();
+      };
+
+      sel.addEventListener('change', updateCfg);
+      startRange.addEventListener('input', updateCfg);
+      lenRange.addEventListener('input', updateCfg);
+
+      row.append(title, sel, startLbl, lenLbl);
+      wallGimmickList.appendChild(row);
+    });
+  }
+
+  const angleText = document.getElementById('angleText');
+  const angleVal = document.getElementById('angleVal');
+  const angleSlider = document.getElementById('angleSlider');
+  const stepSelect = document.getElementById('stepSelect');
+  const fineBtnsWrap = document.getElementById('fineBtns');
+  const bounceVal = document.getElementById('bounceVal');
+  const bounceSlider = document.getElementById('bounceSlider');
+  const radiusVal = document.getElementById('radiusVal');
+  const radiusSlider = document.getElementById('radiusSlider');
+  const chkSquareWall = document.getElementById('chkSquareWall');
+  const chkShowEffective = document.getElementById('chkShowEffective');
+  const chkShowContacts = document.getElementById('chkShowContacts');
+  const imgZoomVal = document.getElementById('imgZoomVal');
+  const modeDesc = document.getElementById('modeDesc');
+  const typeBadge = document.getElementById('typeBadge');
+  const practiceBadge = document.getElementById('practiceBadge');
+  const hudGimmick = document.getElementById('hudGimmick');
+  const btnReflect = document.getElementById('btnReflect');
+  const btnPierce = document.getElementById('btnPierce');
+  const btnPractice = document.getElementById('btnPractice');
+  const obsCount = document.getElementById('obsCount');
+  const btnPlay = document.getElementById('btnPlay');
+  const animStatus = document.getElementById('animStatus');
+  const speedSelect = document.getElementById('speedSelect');
+
+  function buildFineButtons() {
+    const step = state.angleStep || 0.25;
+    const coarse = step >= 1 ? 5 : 1;
+    const deltas = [-coarse, -step, step, coarse];
+    fineBtnsWrap.innerHTML = '';
+    deltas.forEach(d => {
+      const b = document.createElement('button');
+      const label = (d > 0 ? '+' : '') + (Number.isInteger(d) ? d : d.toFixed(2)) + '°';
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        state.angleDeg = quantizeAngle(state.angleDeg + d);
+        resetAnim();
+        syncUI();
+        saveState();
+        render();
+      });
+      fineBtnsWrap.appendChild(b);
+    });
+  }
+
+  function syncUI() {
+    state.angleDeg = quantizeAngle(state.angleDeg);
+    const step = state.angleStep || 0.25;
+    stepSelect.value = String(step);
+    angleSlider.step = String(step);
+    angleSlider.value = state.angleDeg;
+
+    const aStr = formatAngle(state.angleDeg);
+    angleText.textContent = aStr;
+    angleVal.textContent = aStr;
+
+    const isPierce = state.shotType === 'pierce';
+    btnReflect.classList.toggle('active', !isPierce);
+    btnPierce.classList.toggle('active-pierce', isPierce);
+    typeBadge.textContent = isPierce ? '貫通' : '反射';
+    typeBadge.className = 'pill ' + (isPierce ? 'pill-pierce' : 'pill-reflect');
+
+    btnPractice.classList.toggle('active-practice', state.practiceMode);
+    practiceBadge.style.display = state.practiceMode ? 'inline-block' : 'none';
+
+    state.bounces = Math.max(1, Math.min(16, state.bounces));
+    bounceVal.textContent = state.bounces + ' 回';
+    bounceSlider.value = state.bounces;
+
+    radiusVal.textContent = '壁幅の ' + (state.radiusWallRatio * 100).toFixed(1) + '%';
+    radiusSlider.value = (state.radiusWallRatio * 100).toFixed(1);
+    chkShowContacts.checked = state.showContacts;
+    imgZoomVal.textContent = bgImage ? Math.round(imgView.s * 100) + '%' : '画像なし';
+
+    chkSquareWall.checked = state.lockWallRatio;
+    chkShowEffective.checked = state.showEffective;
+    obsCount.textContent = state.obstacles.length + '個';
+
+    btnPlay.textContent = isPlaying ? '⏸ 停止' : '▶ 再生';
+    btnPlay.classList.toggle('active-play', isPlaying);
+    const qbPlay = document.getElementById('qbPlay');
+    qbPlay.textContent = isPlaying ? '⏸' : '▶';
+    qbPlay.classList.toggle('active-play', isPlaying);
+    animStatus.textContent = isPlaying ? `再生中 (${animSpeed}x)` : (animDistance > 0 ? '一時停止' : '停止中');
+  }
+
+  function resizeCanvas() {
+    const rect = wrap.getBoundingClientRect();
+    const aspect = CANVAS_W / CANVAS_H;
+    let drawW = rect.width;
+    let drawH = drawW / aspect;
+    if (drawH > rect.height) {
+      drawH = rect.height;
+      drawW = drawH * aspect;
+    }
+    const dpr = window.devicePixelRatio || 1;
+    canvas.style.width = Math.floor(drawW) + 'px';
+    canvas.style.height = Math.floor(drawH) + 'px';
+    canvas.width = Math.floor(drawW * dpr);
+    canvas.height = Math.floor(drawH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (state.lockWallRatio) {
+      enforceWallAspect(Math.floor(drawW), Math.floor(drawH), 'center');
+    }
+    render();
+  }
+
+  window.addEventListener('resize', resizeCanvas);
+
+  function drawDummyBackground(w, h) {
+    ctx.fillStyle = '#151922';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.fillStyle = '#222836';
+    ctx.fillRect(0, 0, w, h * 0.13);
+    ctx.fillStyle = '#8b9bb4';
+    ctx.font = `bold ${Math.max(11, w * 0.032)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('【模擬ステージ画面】スクショ読込で実画面に切替', w * 0.5, h * 0.083);
+
+    const wl = state.wall.left * w;
+    const wr = state.wall.right * w;
+    const wt = state.wall.top * h;
+    const wb = state.wall.bottom * h;
+
+    ctx.fillStyle = '#243038';
+    ctx.fillRect(wl, wt, wr - wl, wb - wt);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 6; i++) {
+      const gx = wl + (wr - wl) * (i / 6);
+      ctx.beginPath(); ctx.moveTo(gx, wt); ctx.lineTo(gx, wb); ctx.stroke();
+    }
+    for (let j = 1; j < 6; j++) {
+      const gy = wt + (wb - wt) * (j / 6);
+      ctx.beginPath(); ctx.moveTo(wl, gy); ctx.lineTo(wr, gy); ctx.stroke();
+    }
+
+    ctx.fillStyle = '#1c212c';
+    ctx.fillRect(0, h * 0.80, w, h * 0.20);
+    for (let i = 0; i < 4; i++) {
+      const bx = w * (0.06 + i * 0.23);
+      const by = h * 0.82;
+      const bw = w * 0.19;
+      const bh = h * 0.11;
+      ctx.fillStyle = '#2d3648';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = i === 0 ? '#ff9800' : '#45526b';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx, by, bw, bh);
+    }
+  }
+
+  function segmentCircleIntersections(ax, ay, bx, by, cx, cy, r) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const fx = ax - cx;
+    const fy = ay - cy;
+    const a = dx * dx + dy * dy;
+    if (a < 1e-12) return [];
+    const b = 2 * (fx * dx + fy * dy);
+    const c = fx * fx + fy * fy - r * r;
+    let disc = b * b - 4 * a * c;
+    if (disc <= 0) return [];
+    disc = Math.sqrt(disc);
+    const rawT1 = (-b - disc) / (2 * a);
+    const rawT2 = (-b + disc) / (2 * a);
+    if (rawT2 < 0 || rawT1 > 1) return [];
+    const t1 = Math.max(0, rawT1);
+    const t2 = Math.min(1, rawT2);
+    if (t2 - t1 < 1e-9) return [];
+    return [{
+      t1, t2,
+      p1: { x: ax + dx * t1, y: ay + dy * t1 },
+      p2: { x: ax + dx * t2, y: ay + dy * t2 }
+    }];
+  }
+
+  function isInWallSegment(side, px, py, wl, wr, wt, wb) {
+    const cfg = state.wallGimmicks[side];
+    if (!cfg || cfg.type === 'none') return false;
+    const s = Math.max(0, Math.min(1, cfg.start));
+    const e = Math.max(s, Math.min(1, cfg.start + cfg.length));
+    const tol = 1e-6;
+    if (side === 'top' || side === 'bottom') {
+      const ratio = (px - wl) / Math.max(1, wr - wl);
+      return ratio >= s - tol && ratio <= e + tol;
+    } else {
+      const ratio = (py - wt) / Math.max(1, wb - wt);
+      return ratio >= s - tol && ratio <= e + tol;
+    }
+  }
+
+  function getBallRadiusPx(w) {
+    return state.radiusWallRatio * (state.wall.right - state.wall.left) * w;
+  }
+
+  function rayCircle(cx, cy, vx, vy, ox, oy, R) {
+    const fx = cx - ox;
+    const fy = cy - oy;
+    const b = fx * vx + fy * vy;
+    const c = fx * fx + fy * fy - R * R;
+    const disc = b * b - c;
+    if (disc < 0) return Infinity;
+    return -b - Math.sqrt(disc);
+  }
+
+  function rayRoundRect(cx, cy, vx, vy, rc, r, eps) {
+    let best = { t: Infinity, nx: 0, ny: 0 };
+    const tryT = (t, nx, ny) => { if (t > eps && t < best.t) best = { t, nx, ny }; };
+    if (Math.abs(vx) > 1e-9) {
+      const xs = vx > 0 ? rc.left - r : rc.right + r;
+      const nx = vx > 0 ? -1 : 1;
+      const t = (xs - cx) / vx;
+      const y = cy + vy * t;
+      if (y >= rc.top && y <= rc.bottom) tryT(t, nx, 0);
+    }
+    if (Math.abs(vy) > 1e-9) {
+      const ys = vy > 0 ? rc.top - r : rc.bottom + r;
+      const ny = vy > 0 ? -1 : 1;
+      const t = (ys - cy) / vy;
+      const x = cx + vx * t;
+      if (x >= rc.left && x <= rc.right) tryT(t, 0, ny);
+    }
+    if (r > 0) {
+      const corners = [[rc.left, rc.top], [rc.right, rc.top], [rc.left, rc.bottom], [rc.right, rc.bottom]];
+      for (const [kx, ky] of corners) {
+        const t = rayCircle(cx, cy, vx, vy, kx, ky, r);
+        if (t > eps && t < best.t) {
+          const hx = cx + vx * t;
+          const hy = cy + vy * t;
+          const inX = hx >= rc.left && hx <= rc.right;
+          const inY = hy >= rc.top && hy <= rc.bottom;
+          if (inX || inY) continue;
+          const len = Math.hypot(hx - kx, hy - ky) || 1;
+          best = { t, nx: (hx - kx) / len, ny: (hy - ky) / len };
+        }
+      }
+    }
+    return best;
+  }
+
+  function computeTrajectory(w, h) {
+    const rPx = getBallRadiusPx(w);
+    const wallLeft = state.wall.left * w;
+    const wallRight = state.wall.right * w;
+    const wallTop = state.wall.top * h;
+    const wallBottom = state.wall.bottom * h;
+
+    const minX = Math.min(wallLeft + rPx, (wallLeft + wallRight) / 2 - 1);
+    const maxX = Math.max(wallRight - rPx, (wallLeft + wallRight) / 2 + 1);
+    const minY = Math.min(wallTop + rPx, (wallTop + wallBottom) / 2 - 1);
+    const maxY = Math.max(wallBottom - rPx, (wallTop + wallBottom) / 2 + 1);
+
+    let cx = Math.max(minX, Math.min(maxX, state.ball.x * w));
+    let cy = Math.max(minY, Math.min(maxY, state.ball.y * h));
+
+    const rad = (state.angleDeg * Math.PI) / 180;
+    let vx = Math.cos(rad);
+    let vy = Math.sin(rad);
+
+    const pierceHits = [];
+    const events = [];
+    const contacts = [];
+    const isPierce = state.shotType === 'pierce';
+
+    const touchedPuwSides = new Set();
+    let hcwTouches = 0;
+    let cumulativeDist = 0;
+    let insideAtSegEnd = new Set();
+
+    const circles = state.obstacles
+      .filter(o => o.type === 'circle')
+      .map(o => ({
+        id: o.id,
+        cx: o.x * w,
+        cy: o.y * h,
+        hitR: Math.max(2, o.r * w + rPx),
+        visualR: Math.max(4, o.r * w)
+      }));
+
+    const rects = state.obstacles
+      .filter(o => o.type === 'rect')
+      .map(o => {
+        const hw = Math.max(10, o.w * w) / 2;
+        const hh = Math.max(10, o.h * h) / 2;
+        const ox = o.x * w;
+        const oy = o.y * h;
+        return { id: o.id, left: ox - hw, right: ox + hw, top: oy - hh, bottom: oy + hh };
+      });
+
+    let pushedOut = false;
+    for (let iter = 0; iter < 4; iter++) {
+      let moved = false;
+      if (!isPierce) {
+        for (const cr of circles) {
+          const d = Math.hypot(cx - cr.cx, cy - cr.cy);
+          if (d < cr.hitR - 1e-6) {
+            let nx = 0, ny = 1;
+            if (d > 1e-6) { nx = (cx - cr.cx) / d; ny = (cy - cr.cy) / d; }
+            cx = cr.cx + nx * (cr.hitR + 0.5);
+            cy = cr.cy + ny * (cr.hitR + 0.5);
+            moved = true;
+          }
+        }
+      }
+      for (const rc of rects) {
+        const qx = Math.max(rc.left, Math.min(rc.right, cx));
+        const qy = Math.max(rc.top, Math.min(rc.bottom, cy));
+        const d = Math.hypot(cx - qx, cy - qy);
+        if (d < rPx - 1e-6) {
+          if (d > 1e-6) {
+            cx = qx + (cx - qx) / d * (rPx + 0.5);
+            cy = qy + (cy - qy) / d * (rPx + 0.5);
+          } else {
+            const cand = [
+              { x: rc.left - rPx - 0.5, y: cy, d: cx - rc.left },
+              { x: rc.right + rPx + 0.5, y: cy, d: rc.right - cx },
+              { x: cx, y: rc.top - rPx - 0.5, d: cy - rc.top },
+              { x: cx, y: rc.bottom + rPx + 0.5, d: rc.bottom - cy }
+            ].sort((a, b) => a.d - b.d)[0];
+            cx = cand.x; cy = cand.y;
+          }
+          moved = true;
+        }
+      }
+      cx = Math.max(minX, Math.min(maxX, cx));
+      cy = Math.max(minY, Math.min(maxY, cy));
+      if (!moved) break;
+      pushedOut = true;
+    }
+
+    const points = [{ x: cx, y: cy }];
+
+    let bouncesDone = 0;
+    const maxBounces = Math.max(1, Math.min(16, state.bounces));
+    let guard = 0;
+
+    while (bouncesDone < maxBounces && guard < 200) {
+      guard++;
+      const eps = 1e-4;
+      let bestT = Infinity;
+      let bestNormal = null;
+      let hitWallSide = null;
+      let hitEnemyCircle = null;
+      let hitRect = null;
+
+      if (vx > 1e-9) {
+        const t = (maxX - cx) / vx;
+        if (t > eps && t < bestT) { bestT = t; bestNormal = { nx: -1, ny: 0 }; hitWallSide = 'right'; }
+      } else if (vx < -1e-9) {
+        const t = (minX - cx) / vx;
+        if (t > eps && t < bestT) { bestT = t; bestNormal = { nx: 1, ny: 0 }; hitWallSide = 'left'; }
+      }
+      if (vy > 1e-9) {
+        const t = (maxY - cy) / vy;
+        if (t > eps && t < bestT) { bestT = t; bestNormal = { nx: 0, ny: -1 }; hitWallSide = 'bottom'; }
+      } else if (vy < -1e-9) {
+        const t = (minY - cy) / vy;
+        if (t > eps && t < bestT) { bestT = t; bestNormal = { nx: 0, ny: 1 }; hitWallSide = 'top'; }
+      }
+
+      for (const rc of rects) {
+        const hit = rayRoundRect(cx, cy, vx, vy, rc, rPx, eps);
+        if (hit.t < bestT) {
+          bestT = hit.t;
+          bestNormal = { nx: hit.nx, ny: hit.ny };
+          hitWallSide = null;
+          hitEnemyCircle = null;
+          hitRect = rc;
+        }
+      }
+
+      if (!isPierce) {
+        for (const cr of circles) {
+          const tHit = rayCircle(cx, cy, vx, vy, cr.cx, cr.cy, cr.hitR);
+          if (tHit > eps && tHit < bestT) {
+            const hx = cx + vx * tHit;
+            const hy = cy + vy * tHit;
+            const len = Math.hypot(hx - cr.cx, hy - cr.cy) || 1;
+            bestT = tHit;
+            bestNormal = { nx: (hx - cr.cx) / len, ny: (hy - cr.cy) / len };
+            hitWallSide = null;
+            hitRect = null;
+            hitEnemyCircle = cr;
+          }
+        }
+      }
+
+      if (!isFinite(bestT) || !bestNormal) break;
+
+      const nextX = cx + vx * bestT;
+      const nextY = cy + vy * bestT;
+      const segLen = Math.hypot(nextX - cx, nextY - cy);
+
+      if (isPierce) {
+        const segHitsAll = [];
+        for (const cr of circles) {
+          segmentCircleIntersections(cx, cy, nextX, nextY, cr.cx, cr.cy, cr.hitR)
+            .forEach(sh => segHitsAll.push({ sh, cr }));
+        }
+        segHitsAll.sort((a, b) => a.sh.t1 - b.sh.t1);
+        const nextInside = new Set();
+        segHitsAll.forEach(({ sh, cr }) => {
+          const hitDist = cumulativeDist + segLen * sh.t1;
+          if (sh.t2 >= 1 - 1e-9) nextInside.add(cr.id);
+          if (sh.t1 <= 1e-9 && insideAtSegEnd.has(cr.id)) {
+            pierceHits.push({ p1: sh.p1, p2: sh.p2, obsId: cr.id, distAtHit: hitDist, cont: true });
+            return;
+          }
+          pierceHits.push({ p1: sh.p1, p2: sh.p2, obsId: cr.id, distAtHit: hitDist });
+          hcwTouches = 0;
+          events.push({
+            dist: hitDist,
+            kind: 'enemy_reset',
+            puwLv: Math.min(3, touchedPuwSides.size),
+            hcwLv: 0
+          });
+        });
+        insideAtSegEnd = nextInside;
+      }
+
+      cumulativeDist += segLen;
+      cx = nextX;
+      cy = nextY;
+      points.push({ x: cx, y: cy });
+      bouncesDone++;
+
+      if (hitEnemyCircle) {
+        contacts.push({
+          kind: 'circle', x: cx, y: cy,
+          nx: bestNormal.nx, ny: bestNormal.ny,
+          ox: hitEnemyCircle.cx, oy: hitEnemyCircle.cy,
+          dist: cumulativeDist
+        });
+        hcwTouches = 0;
+        events.push({
+          dist: cumulativeDist,
+          kind: 'enemy_reset',
+          puwLv: Math.min(3, touchedPuwSides.size),
+          hcwLv: 0
+        });
+      } else if (hitRect) {
+        contacts.push({ kind: 'rect', x: cx, y: cy, nx: bestNormal.nx, ny: bestNormal.ny, dist: cumulativeDist });
+      }
+
+      if (hitWallSide) {
+        const gType = state.wallGimmicks[hitWallSide]?.type || 'none';
+        const inSeg = isInWallSegment(hitWallSide, cx, cy, wallLeft, wallRight, wallTop, wallBottom);
+        if (gType === 'puw' && inSeg) {
+          touchedPuwSides.add(hitWallSide);
+          events.push({
+            dist: cumulativeDist, kind: 'puw', side: hitWallSide,
+            puwLv: Math.min(3, touchedPuwSides.size), hcwLv: hcwTouches
+          });
+        } else if (gType === 'hcw' && inSeg) {
+          hcwTouches = Math.min(4, hcwTouches + 1);
+          events.push({
+            dist: cumulativeDist, kind: 'hcw', side: hitWallSide,
+            puwLv: Math.min(3, touchedPuwSides.size), hcwLv: hcwTouches
+          });
+        }
+      }
+
+      const dot = vx * bestNormal.nx + vy * bestNormal.ny;
+      vx = vx - 2 * dot * bestNormal.nx;
+      vy = vy - 2 * dot * bestNormal.ny;
+      const vLen = Math.hypot(vx, vy) || 1;
+      vx /= vLen;
+      vy /= vLen;
+    }
+
+    events.sort((a, b) => a.dist - b.dist);
+
+    const segments = [];
+    let totalLength = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      const len = Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+      segments.push({ a: points[i], b: points[i + 1], len, startDist: totalLength, endDist: totalLength + len });
+      totalLength += len;
+    }
+
+    return {
+      points, segments, totalLength, pierceHits, events, contacts, pushedOut,
+      rPx, wallLeft, wallRight, wallTop, wallBottom,
+      minX, maxX, minY, maxY
+    };
+  }
+
+  function getAnimatedBallPos(sim, dist) {
+    if (!sim.segments.length) return sim.points[0];
+    const clamped = Math.max(0, Math.min(sim.totalLength, dist));
+    for (const seg of sim.segments) {
+      if (clamped <= seg.endDist || seg === sim.segments[sim.segments.length - 1]) {
+        const ratio = seg.len > 1e-6 ? (clamped - seg.startDist) / seg.len : 0;
+        return {
+          x: seg.a.x + (seg.b.x - seg.a.x) * ratio,
+          y: seg.a.y + (seg.b.y - seg.a.y) * ratio
+        };
+      }
+    }
+    return sim.points[sim.points.length - 1];
+  }
+
+  function tickAnim(now) {
+    if (!isPlaying) return;
+    if (lastFrameTime === null) lastFrameTime = now;
+    const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+    lastFrameTime = now;
+
+    const w = parseFloat(canvas.style.width) || canvas.width;
+    const h = parseFloat(canvas.style.height) || canvas.height;
+    const sim = computeTrajectory(w, h);
+    const speedPxPerSec = w * 0.72 * animSpeed;
+    animDistance += speedPxPerSec * dt;
+
+    if (animDistance > sim.totalLength) {
+      animDistance = 0;
+    }
+    render(sim);
+    rafId = requestAnimationFrame(tickAnim);
+  }
+
+  function startAnim() {
+    if (isPlaying) return;
+    isPlaying = true;
+    lastFrameTime = null;
+    syncUI();
+    rafId = requestAnimationFrame(tickAnim);
+  }
+
+  function stopAnim() {
+    isPlaying = false;
+    lastFrameTime = null;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    syncUI();
+  }
+
+  function resetAnim() {
+    stopAnim();
+    animDistance = 0;
+    syncUI();
+  }
+
+  function drawWallGimmicks(sim, currentDist, isAnimActive) {
+    const refDist = isAnimActive ? currentDist : Infinity;
+    let curPuwLv = 0;
+    let curHcwLv = 0;
+    sim.events.forEach(ev => {
+      if (ev.dist <= refDist) {
+        curPuwLv = ev.puwLv;
+        curHcwLv = ev.hcwLv;
+      }
+    });
+
+    const puwLvColors = ['#90a4ae', '#ffeb3b', '#ff9800', '#ff1744'];
+    const puwCol = puwLvColors[Math.min(3, curPuwLv)];
+
+    ['top', 'bottom', 'left', 'right'].forEach(side => {
+      const cfg = state.wallGimmicks[side];
+      if (!cfg || cfg.type === 'none') return;
+
+      const s = Math.max(0, Math.min(1, cfg.start));
+      const e = Math.max(s, Math.min(1, cfg.start + cfg.length));
+
+      let x1, y1, x2, y2, lx, ly;
+      if (side === 'top') {
+        const span = sim.wallRight - sim.wallLeft;
+        x1 = sim.wallLeft + span * s; x2 = sim.wallLeft + span * e;
+        y1 = y2 = sim.wallTop;
+        lx = (x1 + x2) / 2; ly = sim.wallTop + 12;
+      } else if (side === 'bottom') {
+        const span = sim.wallRight - sim.wallLeft;
+        x1 = sim.wallLeft + span * s; x2 = sim.wallLeft + span * e;
+        y1 = y2 = sim.wallBottom;
+        lx = (x1 + x2) / 2; ly = sim.wallBottom - 12;
+      } else if (side === 'left') {
+        const span = sim.wallBottom - sim.wallTop;
+        x1 = x2 = sim.wallLeft;
+        y1 = sim.wallTop + span * s; y2 = sim.wallTop + span * e;
+        lx = sim.wallLeft + 26; ly = (y1 + y2) / 2;
+      } else {
+        const span = sim.wallBottom - sim.wallTop;
+        x1 = x2 = sim.wallRight;
+        y1 = sim.wallTop + span * s; y2 = sim.wallTop + span * e;
+        lx = sim.wallRight - 26; ly = (y1 + y2) / 2;
+      }
+
+      ctx.save();
+      if (cfg.type === 'puw') {
+        ctx.strokeStyle = puwCol;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        ctx.fillStyle = puwCol;
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`PUW(Lv.${curPuwLv})`, lx, ly);
+      } else if (cfg.type === 'hcw') {
+        ctx.strokeStyle = '#00e5ff';
+        ctx.lineWidth = 5;
+        ctx.setLineDash([8, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#00e5ff';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`HCW(${curHcwLv}/4)`, lx, ly);
+      }
+      ctx.restore();
+    });
+
+    const hasPuw = Object.values(state.wallGimmicks).some(g => g.type === 'puw');
+    const hasHcw = Object.values(state.wallGimmicks).some(g => g.type === 'hcw');
+    const parts = [];
+    if (hasPuw) parts.push(`<span style="color:${puwCol};font-weight:bold;">PUW: Lv.${curPuwLv}/3</span>`);
+    if (hasHcw) parts.push(`<span style="color:#00e5ff;font-weight:bold;">HCW: ${curHcwLv}/4触れ</span>`);
+    if (state.shotType === 'pierce') {
+      const hitCount = isAnimActive
+        ? sim.pierceHits.filter(h => !h.cont && h.distAtHit <= refDist).length
+        : sim.pierceHits.filter(h => !h.cont).length;
+      if (!state.practiceMode || isAnimActive) {
+        parts.push(`<span style="color:#69f0ae;font-weight:bold;">貫通HIT: ${hitCount}回</span>`);
+      }
+    }
+    hudGimmick.innerHTML = parts.join(' / ');
+  }
+
+  function render(precomputedSim = null) {
+    const w = parseFloat(canvas.style.width) || canvas.width;
+    const h = parseFloat(canvas.style.height) || canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (bgImage) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      const dw = imgView.s * w;
+      const dh = dw * (bgImage.naturalHeight / bgImage.naturalWidth);
+      ctx.drawImage(bgImage, imgView.x * w, imgView.y * h, dw, dh);
+    } else {
+      drawDummyBackground(w, h);
+    }
+
+    const sim = precomputedSim || computeTrajectory(w, h);
+    const isPierce = state.shotType === 'pierce';
+    const isAnimActive = isPlaying || animDistance > 0;
+    const showPrediction = !state.practiceMode;
+
+    ctx.save();
+
+    state.obstacles.forEach((o, idx) => {
+      const isSelected = o.id === selectedObsId;
+      const lbl = o.label || (o.type === 'circle' ? '敵' + (idx + 1) : 'ブロック');
+      if (o.type === 'circle') {
+        const ox = o.x * w;
+        const oy = o.y * h;
+        const r = Math.max(4, o.r * w);
+
+        ctx.beginPath();
+        ctx.arc(ox, oy, r, 0, Math.PI * 2);
+        ctx.fillStyle = isPierce ? 'rgba(229, 57, 53, 0.42)' : 'rgba(229, 57, 53, 0.65)';
+        ctx.fill();
+        ctx.lineWidth = isSelected ? 3 : 2;
+        ctx.strokeStyle = isSelected ? '#00e5ff' : 'rgba(255,255,255,0.65)';
+        ctx.stroke();
+
+        if (sim.rPx > 1 && showPrediction) {
+          ctx.beginPath();
+          ctx.arc(ox, oy, r + sim.rPx, 0, Math.PI * 2);
+          ctx.strokeStyle = isPierce ? 'rgba(105, 240, 174, 0.35)' : 'rgba(255, 235, 59, 0.25)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(10, Math.min(13, r * 0.38))}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(lbl, ox, oy);
+
+        if (mode === 'obs' && isSelected) {
+          ctx.beginPath();
+          ctx.arc(ox + r, oy, 6, 0, Math.PI * 2);
+          ctx.fillStyle = '#00e5ff';
+          ctx.fill();
+          ctx.strokeStyle = '#0a0c10';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      } else if (o.type === 'rect') {
+        const ox = o.x * w;
+        const oy = o.y * h;
+        const rw = Math.max(10, o.w * w);
+        const rh = Math.max(10, o.h * h);
+        const left = ox - rw / 2;
+        const top = oy - rh / 2;
+
+        ctx.fillStyle = 'rgba(120, 144, 156, 0.72)';
+        ctx.fillRect(left, top, rw, rh);
+        ctx.lineWidth = isSelected ? 3 : 2;
+        ctx.strokeStyle = isSelected ? '#00e5ff' : '#cfd8dc';
+        ctx.strokeRect(left, top, rw, rh);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(9, Math.min(12, rh * 0.55))}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(lbl, ox, oy);
+
+        if (mode === 'obs' && isSelected) {
+          const handles = [
+            { x: ox + rw / 2, y: oy },
+            { x: ox, y: oy + rh / 2 }
+          ];
+          handles.forEach(pt => {
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#00e5ff';
+            ctx.fill();
+            ctx.strokeStyle = '#0a0c10';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          });
+        }
+      }
+    });
+
+    ctx.strokeStyle = mode === 'wall' ? '#00e5ff' : 'rgba(0, 188, 212, 0.75)';
+    ctx.lineWidth = mode === 'wall' ? 2.5 : 1.5;
+    ctx.strokeRect(sim.wallLeft, sim.wallTop, sim.wallRight - sim.wallLeft, sim.wallBottom - sim.wallTop);
+
+    drawWallGimmicks(sim, animDistance, isAnimActive);
+
+    if (state.showEffective && sim.rPx > 1 && showPrediction) {
+      ctx.strokeStyle = 'rgba(105, 240, 174, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(sim.minX, sim.minY, sim.maxX - sim.minX, sim.maxY - sim.minY);
+      ctx.setLineDash([]);
+    }
+
+    if (mode === 'wall') {
+      const handles = getWallHandles(w, h);
+      ctx.fillStyle = '#00e5ff';
+      ctx.strokeStyle = '#0a0c10';
+      ctx.lineWidth = 2;
+      Object.values(handles).forEach(pt => {
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+
+    const pts = sim.points;
+    if (showPrediction) {
+      if (pts.length >= 2) {
+        for (let i = 0; i < pts.length - 1; i++) {
+          const alpha = Math.max(0.25, 0.95 - i * 0.045);
+          ctx.beginPath();
+          ctx.moveTo(pts[i].x, pts[i].y);
+          ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+          ctx.strokeStyle = i === 0 ? '#ffeb3b' : `rgba(255, 152, 0, ${alpha})`;
+          ctx.lineWidth = i === 0 ? 3 : 2.2;
+          ctx.stroke();
+
+          if (i > 0) {
+            ctx.beginPath();
+            ctx.arc(pts[i].x, pts[i].y, 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff9800';
+            ctx.fill();
+          }
+        }
+      }
+    } else if (isAnimActive && sim.segments.length > 0) {
+      for (const seg of sim.segments) {
+        if (animDistance <= seg.startDist) break;
+        const endRatio = Math.min(1, (animDistance - seg.startDist) / (seg.len || 1));
+        ctx.beginPath();
+        ctx.moveTo(seg.a.x, seg.a.y);
+        ctx.lineTo(
+          seg.a.x + (seg.b.x - seg.a.x) * endRatio,
+          seg.a.y + (seg.b.y - seg.a.y) * endRatio
+        );
+        ctx.strokeStyle = 'rgba(244, 143, 177, 0.85)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
+    }
+
+    if (isPierce && sim.pierceHits.length > 0) {
+      let hitNo = 0;
+      sim.pierceHits.forEach((hit) => {
+        if (!hit.cont) hitNo++;
+        if (!showPrediction && (!isAnimActive || hit.distAtHit > animDistance)) return;
+        ctx.beginPath();
+        ctx.moveTo(hit.p1.x, hit.p1.y);
+        ctx.lineTo(hit.p2.x, hit.p2.y);
+        ctx.strokeStyle = '#69f0ae';
+        ctx.lineWidth = 4.5;
+        ctx.stroke();
+
+        if (hit.cont) return;
+        ctx.beginPath();
+        ctx.arc(hit.p1.x, hit.p1.y, 5.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#69f0ae';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#08150e';
+        ctx.stroke();
+
+        ctx.fillStyle = '#69f0ae';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`#${hitNo}`, hit.p1.x + 7, hit.p1.y - 3);
+      });
+    }
+
+    if (showPrediction && state.showContacts && sim.contacts.length > 0) {
+      sim.contacts.forEach(c => {
+        const sx = c.x - c.nx * sim.rPx;
+        const sy = c.y - c.ny * sim.rPx;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, Math.max(3, sim.rPx), 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const ext = Math.max(18, sim.rPx * 1.6);
+        ctx.beginPath();
+        if (c.kind === 'circle') ctx.moveTo(c.ox, c.oy); else ctx.moveTo(sx, sy);
+        ctx.lineTo(c.x + c.nx * ext, c.y + c.ny * ext);
+        ctx.strokeStyle = 'rgba(0, 229, 255, 0.85)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#00e5ff';
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+    if (sim.pushedOut) {
+      hudGimmick.innerHTML += (hudGimmick.innerHTML ? ' / ' : '') +
+        '<span style="color:#ff8a80;font-weight:bold;">⚠ 重なり→押し出して計算</span>';
+    }
+
+    const startPt = pts[0];
+    const rad = (state.angleDeg * Math.PI) / 180;
+    const pullLen = Math.min(w, h) * 0.14;
+
+    ctx.beginPath();
+    ctx.moveTo(startPt.x, startPt.y);
+    ctx.lineTo(startPt.x - Math.cos(rad) * pullLen, startPt.y - Math.sin(rad) * pullLen);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const shortArrowLen = Math.min(w, h) * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(startPt.x, startPt.y);
+    ctx.lineTo(startPt.x + Math.cos(rad) * shortArrowLen, startPt.y + Math.sin(rad) * shortArrowLen);
+    ctx.strokeStyle = isPierce ? 'rgba(105, 240, 174, 0.8)' : 'rgba(255, 235, 59, 0.85)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    const drawR = Math.max(6, sim.rPx);
+    ctx.beginPath();
+    ctx.arc(startPt.x, startPt.y, drawR, 0, Math.PI * 2);
+    ctx.strokeStyle = isPierce ? 'rgba(105, 240, 174, 0.45)' : 'rgba(255, 235, 59, 0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    const activePos = isAnimActive ? getAnimatedBallPos(sim, animDistance) : startPt;
+    ctx.beginPath();
+    ctx.arc(activePos.x, activePos.y, drawR, 0, Math.PI * 2);
+    ctx.fillStyle = isPierce ? 'rgba(105, 240, 174, 0.38)' : 'rgba(255, 235, 59, 0.38)';
+    ctx.fill();
+    ctx.strokeStyle = isPierce ? '#69f0ae' : '#ffeb3b';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(activePos.x, activePos.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+
+    ctx.restore();
+    positionOverlays();
+  }
+
+  function getWallHandles(w, h) {
+    const l = state.wall.left * w;
+    const r = state.wall.right * w;
+    const t = state.wall.top * h;
+    const b = state.wall.bottom * h;
+    const mx = (l + r) / 2;
+    const my = (t + b) / 2;
+    return {
+      tl: { x: l, y: t }, tr: { x: r, y: t },
+      bl: { x: l, y: b }, br: { x: r, y: b },
+      top: { x: mx, y: t }, bottom: { x: mx, y: b },
+      left: { x: l, y: my }, right: { x: r, y: my }
+    };
+  }
+
+  function getCanvasPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      w: rect.width,
+      h: rect.height
+    };
+  }
+
+  function hitTestObstacle(px, py, w, h) {
+    if (selectedObsId) {
+      const sel = state.obstacles.find(o => o.id === selectedObsId);
+      if (sel) {
+        const ox = sel.x * w;
+        const oy = sel.y * h;
+        if (sel.type === 'circle') {
+          const r = Math.max(4, sel.r * w);
+          if (Math.hypot(px - (ox + r), py - oy) <= 22) return { obs: sel, handle: 'r' };
+        } else if (sel.type === 'rect') {
+          const rw = Math.max(10, sel.w * w);
+          const rh = Math.max(10, sel.h * h);
+          if (Math.hypot(px - (ox + rw / 2), py - oy) <= 22) return { obs: sel, handle: 'w' };
+          if (Math.hypot(px - ox, py - (oy + rh / 2)) <= 22) return { obs: sel, handle: 'h' };
+        }
+      }
+    }
+
+    for (let i = state.obstacles.length - 1; i >= 0; i--) {
+      const o = state.obstacles[i];
+      const ox = o.x * w;
+      const oy = o.y * h;
+      if (o.type === 'circle') {
+        const r = Math.max(8, o.r * w);
+        if (Math.hypot(px - ox, py - oy) <= r + 6) return { obs: o, handle: 'move' };
+      } else if (o.type === 'rect') {
+        const rw = Math.max(14, o.w * w);
+        const rh = Math.max(14, o.h * h);
+        if (Math.abs(px - ox) <= rw / 2 + 6 && Math.abs(py - oy) <= rh / 2 + 6) return { obs: o, handle: 'move' };
+      }
+    }
+    return null;
+  }
+
+  function zoomImageAt(px, py, factor, w, h) {
+    if (!bgImage) return;
+    const newS = Math.max(0.05, Math.min(20, imgView.s * factor));
+    const f = newS / imgView.s;
+    const ix = imgView.x * w;
+    const iy = imgView.y * h;
+    imgView = { s: newS, x: (px - (px - ix) * f) / w, y: (py - (py - iy) * f) / h };
+    syncUI();
+    render();
+  }
+  function fitImage(how) {
+    if (!bgImage) return;
+    const w = parseFloat(canvas.style.width) || canvas.width;
+    const h = parseFloat(canvas.style.height) || canvas.height;
+    const ar = bgImage.naturalHeight / bgImage.naturalWidth;
+    const s = how === 'height' ? (h / ar) / w : 1;
+    const dw = s * w;
+    const dh = dw * ar;
+    imgView = { s, x: (w - dw) / 2 / w, y: (h - dh) / 2 / h };
+    syncUI();
+    render();
+  }
+  canvas.addEventListener('wheel', (e) => {
+    if (mode !== 'img' || !bgImage) return;
+    e.preventDefault();
+    const pos = getCanvasPos(e);
+    const step = e.shiftKey ? 1.01 : 1.1;
+    zoomImageAt(pos.x, pos.y, e.deltaY < 0 ? step : 1 / step, pos.w, pos.h);
+  }, { passive: false });
+
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    const pos = getCanvasPos(e);
+    isDragging = true;
+    dragStart = { x: pos.x, y: pos.y };
+    activePointers.set(e.pointerId, { x: pos.x, y: pos.y });
+
+    if (mode === 'img') {
+      if (activePointers.size >= 2) {
+        const [p1, p2] = [...activePointers.values()];
+        pinchStart = { d: Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1, s: imgView.s };
+        imgDragStart = null;
+      } else {
+        imgDragStart = { x: pos.x, y: pos.y, view: { ...imgView } };
+      }
+      return;
+    }
+
+    if (mode === 'ball') {
+      state.ball.x = Math.max(0.02, Math.min(0.98, pos.x / pos.w));
+      state.ball.y = Math.max(0.02, Math.min(0.98, pos.y / pos.h));
+      resetAnim();
+      saveState();
+      render();
+    } else if (mode === 'wall') {
+      const handles = getWallHandles(pos.w, pos.h);
+      activeWallHandle = null;
+      let minDist = 28;
+      for (const [key, pt] of Object.entries(handles)) {
+        const d = Math.hypot(pos.x - pt.x, pos.y - pt.y);
+        if (d < minDist) { minDist = d; activeWallHandle = key; }
+      }
+      startWall = { ...state.wall };
+      startScene = snapshotScene();
+    } else if (mode === 'obs') {
+      const hit = hitTestObstacle(pos.x, pos.y, pos.w, pos.h);
+      if (hit) {
+        selectedObsId = hit.obs.id;
+        activeObsHandle = hit.handle;
+        startObs = { ...hit.obs };
+      } else {
+        selectedObsId = null;
+        activeObsHandle = null;
+      }
+      render();
+    }
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const pos = getCanvasPos(e);
+    if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: pos.x, y: pos.y });
+
+    if (mode === 'img') {
+      if (!bgImage) return;
+      if (activePointers.size >= 2 && pinchStart) {
+        const [p1, p2] = [...activePointers.values()];
+        const d = Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1;
+        const target = pinchStart.s * (d / pinchStart.d);
+        zoomImageAt((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, target / imgView.s, pos.w, pos.h);
+      } else if (imgDragStart) {
+        imgView = {
+          ...imgView,
+          x: imgDragStart.view.x + (pos.x - imgDragStart.x) / pos.w,
+          y: imgDragStart.view.y + (pos.y - imgDragStart.y) / pos.h
+        };
+        render();
+      }
+      return;
+    }
+
+    if (mode === 'ball') {
+      state.ball.x = Math.max(0.02, Math.min(0.98, pos.x / pos.w));
+      state.ball.y = Math.max(0.02, Math.min(0.98, pos.y / pos.h));
+      animDistance = 0;
+      render();
+    } else if (mode === 'wall' && activeWallHandle && startWall) {
+      const dx = (pos.x - dragStart.x) / pos.w;
+      const dy = (pos.y - dragStart.y) / pos.h;
+      const wObj = { ...startWall };
+      const minGap = 0.12;
+      const HANDLE_EDGES = {
+        tl: ['l', 't'], tr: ['r', 't'], bl: ['l', 'b'], br: ['r', 'b'],
+        top: ['t'], bottom: ['b'], left: ['l'], right: ['r']
+      };
+      const edges = HANDLE_EDGES[activeWallHandle] || [];
+      if (edges.includes('l')) wObj.left = Math.max(0, Math.min(startWall.right - minGap, startWall.left + dx));
+      if (edges.includes('r')) wObj.right = Math.min(1, Math.max(startWall.left + minGap, startWall.right + dx));
+      if (edges.includes('t')) wObj.top = Math.max(0, Math.min(startWall.bottom - minGap, startWall.top + dy));
+      if (edges.includes('b')) wObj.bottom = Math.min(1, Math.max(startWall.top + minGap, startWall.bottom + dy));
+
+      if (state.lockWallRatio) {
+        const anchor = edges.includes('t') ? 'top' :
+                       edges.includes('b') ? 'bottom' :
+                       edges.includes('l') ? 'left' :
+                       edges.includes('r') ? 'right' : 'center';
+        enforceWallAspect(pos.w, pos.h, anchor, wObj, startWall, startScene);
+      } else {
+        setWall(wObj, startWall, startScene);
+      }
+      animDistance = 0;
+      render();
+    } else if (mode === 'obs' && selectedObsId && activeObsHandle && startObs) {
+      const target = state.obstacles.find(o => o.id === selectedObsId);
+      if (!target) return;
+      const dx = (pos.x - dragStart.x) / pos.w;
+      const dy = (pos.y - dragStart.y) / pos.h;
+
+      if (activeObsHandle === 'move') {
+        target.x = Math.max(0.02, Math.min(0.98, startObs.x + dx));
+        target.y = Math.max(0.02, Math.min(0.98, startObs.y + dy));
+      } else if (activeObsHandle === 'r') {
+        target.r = Math.max(0.015, Math.min(0.30, startObs.r + dx));
+      } else if (activeObsHandle === 'w') {
+        target.w = Math.max(0.03, Math.min(0.80, startObs.w + dx * 2));
+      } else if (activeObsHandle === 'h') {
+        target.h = Math.max(0.02, Math.min(0.50, startObs.h + dy * 2));
+      }
+      render();
+    } else if (mode === 'pull') {
+      const dx = pos.x - dragStart.x;
+      const dy = pos.y - dragStart.y;
+      if (Math.hypot(dx, dy) > 8) {
+        const rad = Math.atan2(-dy, -dx);
+        state.angleDeg = quantizeAngle((rad * 180) / Math.PI);
+        animDistance = 0;
+        syncUI();
+        render();
+      }
+    }
+  });
+
+  function endDrag(e) {
+    if (e && e.pointerId !== undefined) activePointers.delete(e.pointerId);
+    if (activePointers.size < 2) pinchStart = null;
+    if (mode === 'img' && activePointers.size === 1) {
+      const p = [...activePointers.values()][0];
+      imgDragStart = { x: p.x, y: p.y, view: { ...imgView } };
+      return;
+    }
+    imgDragStart = null;
+    if (!isDragging) return;
+    isDragging = false;
+    activeWallHandle = null;
+    activeObsHandle = null;
+    saveState();
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  btnPlay.addEventListener('click', () => {
+    if (isPlaying) stopAnim();
+    else startAnim();
+  });
+
+  document.getElementById('btnResetAnim').addEventListener('click', () => {
+    resetAnim();
+    render();
+  });
+
+  speedSelect.addEventListener('change', () => {
+    animSpeed = parseFloat(speedSelect.value) || 1.0;
+    syncUI();
+  });
+
+  btnReflect.addEventListener('click', () => {
+    state.shotType = 'reflect';
+    resetAnim();
+    syncUI();
+    saveState();
+    render();
+  });
+
+  btnPierce.addEventListener('click', () => {
+    state.shotType = 'pierce';
+    resetAnim();
+    syncUI();
+    saveState();
+    render();
+  });
+
+  btnPractice.addEventListener('click', () => {
+    state.practiceMode = !state.practiceMode;
+    resetAnim();
+    syncUI();
+    saveState();
+    render();
+  });
+
+  document.getElementById('clearWallGimmick').addEventListener('click', () => {
+    state.wallGimmicks = makeDefaultWallGimmicks();
+    buildWallGimmickUI();
+    saveState();
+    render();
+  });
+
+  const modeBtns = {
+    pull: document.getElementById('modePull'),
+    ball: document.getElementById('modeBall'),
+    obs: document.getElementById('modeObs'),
+    wall: document.getElementById('modeWall'),
+    img: document.getElementById('modeImg')
+  };
+  const modeTexts = {
+    pull: '画面のどこでもドラッグで引っ張り方向を調整',
+    ball: 'タップ／ドラッグで発射キャラの位置を移動',
+    obs: '障害物をドラッグ移動／水色ハンドルでサイズ変更',
+    wall: '青いハンドルで壁枠を合わせる（中身も追従）',
+    img: '画像をドラッグ移動／ホイール・ピンチで拡大縮小'
+  };
+
+  function setMode(newMode) {
+    mode = newMode;
+    Object.entries(modeBtns).forEach(([k, btn]) => {
+      btn.classList.toggle('active', k === newMode);
+    });
+    modeDesc.textContent = modeTexts[newMode];
+    document.querySelectorAll('.qb[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === newMode));
+    showModeToast();
+    render();
+  }
+
+  modeBtns.pull.addEventListener('click', () => setMode('pull'));
+  modeBtns.ball.addEventListener('click', () => setMode('ball'));
+  modeBtns.obs.addEventListener('click', () => setMode('obs'));
+  modeBtns.wall.addEventListener('click', () => setMode('wall'));
+  modeBtns.img.addEventListener('click', () => setMode('img'));
+  document.getElementById('imgFitW').addEventListener('click', () => fitImage('width'));
+  document.getElementById('imgFitH').addEventListener('click', () => fitImage('height'));
+  const zoomCenter = (f) => {
+    const w = parseFloat(canvas.style.width) || canvas.width;
+    const h = parseFloat(canvas.style.height) || canvas.height;
+    zoomImageAt(w / 2, h / 2, f, w, h);
+  };
+  document.getElementById('imgZoomIn').addEventListener('click', () => zoomCenter(1.05));
+  document.getElementById('imgZoomOut').addEventListener('click', () => zoomCenter(1 / 1.05));
+  chkShowContacts.addEventListener('change', () => {
+    state.showContacts = chkShowContacts.checked;
+    saveState();
+    render();
+  });
+
+  document.getElementById('addCircle').addEventListener('click', () => {
+    const id = 'o_' + Date.now() + '_' + Math.floor(Math.random() * 100);
+    state.obstacles.push({ id, type: 'circle', x: 0.5, y: 0.42, r: 0.055, label: '敵' });
+    selectedObsId = id;
+    setMode('obs');
+    syncUI();
+    saveState();
+    render();
+  });
+
+  document.getElementById('addRect').addEventListener('click', () => {
+    const id = 'o_' + Date.now() + '_' + Math.floor(Math.random() * 100);
+    state.obstacles.push({ id, type: 'rect', x: 0.5, y: 0.48, w: 0.22, h: 0.032, label: 'ブロック' });
+    selectedObsId = id;
+    setMode('obs');
+    syncUI();
+    saveState();
+    render();
+  });
+
+  document.getElementById('delObs').addEventListener('click', () => {
+    if (!selectedObsId) return;
+    state.obstacles = state.obstacles.filter(o => o.id !== selectedObsId);
+    selectedObsId = state.obstacles.length > 0 ? state.obstacles[state.obstacles.length - 1].id : null;
+    syncUI();
+    saveState();
+    render();
+  });
+
+  document.getElementById('clearObs').addEventListener('click', () => {
+    state.obstacles = [];
+    selectedObsId = null;
+    syncUI();
+    saveState();
+    render();
+  });
+
+  stepSelect.addEventListener('change', () => {
+    state.angleStep = parseFloat(stepSelect.value);
+    state.angleDeg = quantizeAngle(state.angleDeg);
+    buildFineButtons();
+    syncUI();
+    saveState();
+    render();
+  });
+
+  angleSlider.addEventListener('input', () => {
+    state.angleDeg = quantizeAngle(parseFloat(angleSlider.value));
+    animDistance = 0;
+    syncUI();
+    render();
+  });
+  angleSlider.addEventListener('change', saveState);
+
+  bounceSlider.addEventListener('input', () => {
+    state.bounces = Math.max(1, Math.min(16, parseInt(bounceSlider.value, 10)));
+    animDistance = 0;
+    syncUI();
+    render();
+  });
+  bounceSlider.addEventListener('change', saveState);
+
+  radiusSlider.addEventListener('input', () => {
+    state.radiusWallRatio = parseFloat(radiusSlider.value) / 100;
+    animDistance = 0;
+    syncUI();
+    render();
+  });
+  radiusSlider.addEventListener('change', saveState);
+
+  chkSquareWall.addEventListener('change', () => {
+    state.lockWallRatio = chkSquareWall.checked;
+    const wPx = parseFloat(canvas.style.width) || canvas.width;
+    const hPx = parseFloat(canvas.style.height) || canvas.height;
+    if (state.lockWallRatio) enforceWallAspect(wPx, hPx, 'center');
+    resetAnim();
+    saveState();
+    render();
+  });
+
+  chkShowEffective.addEventListener('change', () => {
+    state.showEffective = chkShowEffective.checked;
+    saveState();
+    render();
+  });
+
+  document.getElementById('presetIphone').addEventListener('click', () => {
+    state.lockWallRatio = true;
+    const fromWall = { ...state.wall };
+    const scene = snapshotScene();
+    const targetWall = { left: 0.042, right: 0.958, top: 0.224, bottom: 0.699 };
+    const wPx = parseFloat(canvas.style.width) || canvas.width;
+    const hPx = parseFloat(canvas.style.height) || canvas.height;
+    enforceWallAspect(wPx, hPx, 'center', targetWall, fromWall, scene);
+    resetAnim();
+    syncUI();
+    saveState();
+    render();
+  });
+
+  document.getElementById('presetSquareCenter').addEventListener('click', () => {
+    state.lockWallRatio = true;
+    const fromWall = { ...state.wall };
+    const scene = snapshotScene();
+    const targetWall = { left: 0.05, right: 0.95, top: 0.20, bottom: 0.80 };
+    const wPx = parseFloat(canvas.style.width) || canvas.width;
+    const hPx = parseFloat(canvas.style.height) || canvas.height;
+    enforceWallAspect(wPx, hPx, 'center', targetWall, fromWall, scene);
+    resetAnim();
+    syncUI();
+    saveState();
+    render();
+  });
+
+  function loadImageFromFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        bgImage = img;
+        resetAnim();
+        fitImage('width');
+        setMode('img');
+        syncUI();
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  document.getElementById('fileInput').addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0]) loadImageFromFile(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  document.getElementById('btnDummy').addEventListener('click', () => {
+    bgImage = null;
+    imgView = { x: 0, y: 0, s: 1 };
+    resetAnim();
+    syncUI();
+    render();
+  });
+
+  window.addEventListener('paste', (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        loadImageFromFile(item.getAsFile());
+        break;
+      }
+    }
+  });
+
+  wrap.addEventListener('dragover', (e) => e.preventDefault());
+  wrap.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) loadImageFromFile(e.dataTransfer.files[0]);
+  });
+
+  // =========================================================================
+  // レイアウト：全画面キャンバス＋収納式設定パネル＋クイックバー
+  // =========================================================================
+  const appEl = document.getElementById('app');
+  const settingsPanel = document.getElementById('settingsPanel');
+  const PANEL_KEY = 'monst_sim_panel_open';
+  const isWide = () => window.matchMedia('(min-width: 900px)').matches;
+
+  safeProbe = document.createElement('div');
+  safeProbe.style.cssText = 'position:fixed;top:0;left:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);';
+  document.body.appendChild(safeProbe);
+  function safeInsets() {
+    const cs = getComputedStyle(safeProbe);
+    return { top: parseFloat(cs.paddingTop) || 0, bottom: parseFloat(cs.paddingBottom) || 0 };
+  }
+
+  function positionOverlays() {
+    const hudBadge = document.getElementById('hudBadge');
+    const modeToast = document.getElementById('modeToast');
+    const quickbar = document.getElementById('quickbar');
+    if (!hudBadge || !safeProbe) return;
+    const cTop = canvas.offsetTop;
+    const cH = parseFloat(canvas.style.height) || 0;
+    const wallTopPx = cTop + state.wall.top * cH;
+    const wallBottomPx = cTop + state.wall.bottom * cH;
+    const safe = safeInsets();
+    const minTop = Math.max(4, safe.top + 2);
+    const hudH = hudBadge.offsetHeight;
+    let top = wallTopPx - hudH - 6;
+    if (top < minTop) {
+      top = wallBottomPx + 6;
+    }
+    hudBadge.style.top = top + 'px';
+    const qbTop = quickbar.offsetTop;
+    let tTop = top + hudH + 4;
+    if (tTop + 26 > wallTopPx && tTop < wallBottomPx) tTop = qbTop - 32;
+    modeToast.style.top = tTop + 'px';
+  }
+
+  let toastTimer = null;
+  function showModeToast() {
+    const modeToast = document.getElementById('modeToast');
+    modeToast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => modeToast.classList.remove('show'), 1800);
+  }
+
+  function setPanelOpen(open) {
+    appEl.classList.toggle('panel-closed', !open);
+    if (isWide()) localStorage.setItem(PANEL_KEY, open ? '1' : '0');
+    requestAnimationFrame(resizeCanvas);
+  }
+  document.getElementById('qbSettings').addEventListener('click', () => {
+    setPanelOpen(appEl.classList.contains('panel-closed'));
+  });
+  document.getElementById('btnClosePanel').addEventListener('click', () => setPanelOpen(false));
+  document.getElementById('panelBackdrop').addEventListener('click', () => setPanelOpen(false));
+
+  const btnPeek = document.getElementById('btnPeek');
+  const peekOn = (e) => { e.preventDefault(); settingsPanel.classList.add('peek'); document.getElementById('panelBackdrop').style.opacity = '0'; };
+  const peekOff = () => { settingsPanel.classList.remove('peek'); document.getElementById('panelBackdrop').style.opacity = ''; };
+  btnPeek.addEventListener('pointerdown', peekOn);
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btnPeek.addEventListener(ev, peekOff));
+  if (!window.matchMedia('(max-width: 899px)').matches) btnPeek.style.display = 'none';
+
+  document.querySelectorAll('.qb[data-mode]').forEach(b => {
+    b.addEventListener('click', () => setMode(b.dataset.mode));
+  });
+  document.getElementById('qbPlay').addEventListener('click', () => btnPlay.click());
+
+  function nudgeAngle(sign) {
+    const step = state.angleStep || 0.25;
+    state.angleDeg = quantizeAngle(state.angleDeg + sign * step);
+    resetAnim();
+    syncUI();
+    render();
+  }
+  function bindRepeat(btn, sign) {
+    let timer = null, count = 0;
+    const stop = () => { if (timer) { clearTimeout(timer); timer = null; saveState(); } };
+    const tick = () => {
+      nudgeAngle(sign);
+      count++;
+      timer = setTimeout(tick, count < 6 ? 140 : count < 20 ? 70 : 30);
+    };
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); count = 0; stop(); tick(); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+  }
+  bindRepeat(document.getElementById('qbMinus'), -1);
+  bindRepeat(document.getElementById('qbPlus'), +1);
+
+  if (window.ResizeObserver) new ResizeObserver(() => resizeCanvas()).observe(wrap);
+  window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
+
+  if (isWide() && localStorage.getItem(PANEL_KEY) !== '0') appEl.classList.remove('panel-closed');
+
+  // 初期化
+  refreshPresetDropdown();
+  buildWallGimmickUI();
+  buildFineButtons();
+  syncUI();
+  resizeCanvas();
+})();
+</script>
+</body>
+</html>
